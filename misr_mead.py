@@ -35,8 +35,221 @@ import julday
 import fapar_py
 
 timeBefore1 = time.clock()
+# *************************************************************************************
+# Redefine the Prior class because I need 365 days prior for LAI "model"
+# *************************************************************************************
+class PriorMax(Prior):
+       def der_cost ( self, x_dict, state_config ):
+        """Calculate the cost function and its partial derivatives for the prior object.
+        Assumptions of normality are clear# Constant value for all times
+        Takes a parameter dictionary, and a state configuration dictionary as
+        inputs.
+
+        Parameters
+        -----------
+        x_dict: ordered dict
+            The state as a dictionary
+        state_config: oredered dict
+            The configuration dictionary
+
+        Returns
+        --------
+        cost: float
+            The value of the cost function
+        der_cost: array
+            An array with the partial derivatives of the cost function
+        """
+        if sp.issparse ( self.inv_cov ):
+            x = self.pack_from_dict ( x_dict, state_config )
+            err = sp.lil_matrix ( x - self.mu )
+            cost = err.dot ( self.inv_cov ).dot ( err.T )
+            der_cost  = np.array( err.dot ( self.inv_cov ).todense()).squeeze()
+            cost = float(np.array(cost.todense()).squeeze())
+            return cost, der_cost
+
+        # Find out about problems size
+        n, n_elems = get_problem_size ( x_dict, state_config )
+        # Allocate space/initialise the outputs
+        der_cost = np.zeros ( n )
+        cost = 0
+        # The next loop calculates the cost and associated partial derivatives
+        # Mainly based on the parameter type
+        i = 0 # Loop variable
+
+        for param, typo in state_config.iteritems():
+            if typo == FIXED:
+                # Doesn't do anything so we just skip
+                pass
+            elif typo == CONSTANT:
+                cost = cost + 0.5*( x_dict[param] - \
+                            self.mu[param])**2*self.inv_cov[param]
+                der_cost[i] = ( x_dict[param] - self.mu[param]) * \
+                            self.inv_cov[param]
+                i += 1
+            elif typo == VARIABLE:
+
+                if self.inv_cov[param].size == 1:
+                    # Single parameter for all sites/locations etc
+                    # This should really be in the __init__ method!
+                    sigma = self.inv_cov[param]
+
+                    self.inv_cov[param] = sp.dia_matrix ( ( np.ones(n_elems)*sigma, 0 ), shape=(n_elems, n_elems))
+                # Max Edit
+                else:
+                    sigma = self.inv_cov[param]
+                    self.inv_cov[param] = sp.dia_matrix ( ( np.ones(n_elems)*sigma, 0 ), shape=(n_elems, n_elems))
+                # End of Max Edit
+
+                cost_m = ( x_dict[param].flatten() - self.mu[param]) * ( \
+                            self.inv_cov[param] )
+                cost = cost + 0.5*(cost_m*(x_dict[param].flatten() - \
+                            self.mu[param])).sum()
+                der_cost[i:(i+n_elems)] = cost_m
+
+                i += n_elems
+
+        return cost, der_cost
+# *************************************************************************************
+# *************************************************************************************
+# Redefine time_step method without 5 grad step
+# and change n_obs n_bands in init
+class ObservationOperatorMax ( ObservationOperatorTimeSeriesGP ):
+
+    def __init__ ( self, state_grid, state, observations, mask, emulators, bu, \
+            band_pass=None, bw=None ):
+        """
+         observations is an array with n_bands, nt observations. nt has to be the
+         same size as state_grid (can have dummny numbers in). mask is nt*4
+         (mask, vza, sza, raa) array.
 
 
+        """
+        self.state = state
+        self.observations = observations
+        try:
+            self.n_obs, self.n_bands = self.observations.shape
+        except:
+            raise ValueError, "Typically, obs should be (n_obs, n_bands)"
+        self.mask = mask
+        assert ( self.n_obs ) == mask.shape[0]
+        self.state_grid = state_grid
+        self.nt = self.state_grid.shape[0]
+        self.emulators = emulators
+        self.bu = bu
+        self.band_pass = band_pass
+        self.bw = bw
+    # ************************************************************************************
+    def time_step ( self, this_loc ):
+        """Returns relevant information on the observations for a particular time step.
+        """
+        tag = np.round( self.mask[ this_loc, 2:])
+        tag = tuple ( (tag[:2].astype(np.int)).tolist() )
+        this_obs = self.observations[ this_loc, :]
+        return self.emulators[tag], this_obs, [ self.band_pass, self.bw ]
+
+        # tag = np.round(self.mask[ this_loc, 1:].astype (np.int))
+        # tag = tuple ( (tag[:2].astype(np.int)).tolist() )
+        # this_obs = self.observations[ this_loc, :]
+       	# return self.emulators[tag], this_obs, [ self.band_pass, self.bw ]
+# ********************************************************************************************
+# Redifine class State to save *.pkl in other folder
+# ********************************************************************************************
+class StateMax(State):
+    def do_uncertainty ( self, x ):
+        """A method to calculate the uncertainty. Takes in a state vector.
+
+        Parameters
+        -----------
+        x: array
+            State vector (see ``_self._pack_to_dict``)
+
+        Returns
+        ---------
+        A dictionary with the values for the posterior covariance function
+        (sparse matrix), 5, 25, 75 and 95 credible intervals, and the
+        main diagonal standar deviation. In each of these (apart from the
+        posterior covariance sparse matrix), we get a new dictionary with
+        parameter keys and the parameter estimation represented in the
+        selected state grid."""
+
+
+        the_hessian = sp.lil_matrix ( ( x.size, x.size ) )
+        x_dict = self._unpack_to_dict ( x )
+        #cost, der_cost = self.operators["Obs"].der_cost ( x_dict, \
+            #self.state_config )
+        #this_hessian = self.operators["Obs"].der_der_cost ( x_dict, \
+                        #self.state_config, self, epsilon=1e-10 )
+
+        #for epsilon in [ 10e-10, 1e-8, 1e-6, 1e-10, 1e-12, ]:
+            # print "Hessian with epsilon=%e" % epsilon
+        # epsilon is defined in order to use der_der_cost methods that
+        # evaluate the Hessian numerically
+        epsilon = 1e-8
+        for op_name, the_op in self.operators.iteritems():
+            # The try statement is here to allow der_der_cost methods to
+            # take either a state dictionary or a state vector
+            try:
+               this_hessian = the_op.der_der_cost ( x_dict, \
+                    self.state_config, self, epsilon=epsilon )
+	    except OperatorDerDerTypeError:
+                this_hessian = the_op.der_der_cost ( x, self.state_config, \
+                    self, epsilon=epsilon )
+            if self.verbose:
+                print "Saving Hessian to output/hessian/%s_%s.pkl" % ( self.output_name, \
+                    op_name )
+            # Save the individual Hessian contributions to disk
+            cPickle.dump ( this_hessian, open("output/hessian/%s_%s_hessian.pkl" \
+                % ( self.output_name, op_name ), 'w'))
+            # Add the current Hessian contribution to the global Hessian
+            the_hessian = the_hessian + this_hessian
+        # Need to change the sparse storage format for the Hessian to do
+        # the LU decomposition
+        a_sps = sp.csc_matrix( the_hessian )
+        # LU decomposition object
+        lu_obj = sp.linalg.splu( a_sps )
+        # Now, invert the Hessian in order to get the main diagonal elements
+        # of the inverse Hessian (e.g. the variance)
+        main_diag = np.zeros_like ( x )
+        for k in xrange(x.size):
+            b = np.zeros_like ( x )
+            b[k] = 1
+            main_diag[k] = lu_obj.solve ( b )[k]
+
+        post_cov = sp.dia_matrix(main_diag,0 ).tolil() # Sparse purely diagonal covariance matrix
+        post_sigma = np.sqrt ( main_diag ).squeeze()
+        # Calculate credible intervals, transform them back to real units, and
+        # store in a dictionary.
+        _ci_5 = self._unpack_to_dict( x - 1.96*post_sigma, do_invtransform=True )
+        _ci_95 = self._unpack_to_dict( x + 1.96*post_sigma, do_invtransform=True )
+        _ci_25 = self._unpack_to_dict( x - 0.67*post_sigma, do_invtransform=True )
+        _ci_75 = self._unpack_to_dict( x + 0.67*post_sigma, do_invtransform=True )
+        # There intervals are OK in transformed space. However, we need to ensure that
+        # e.g. ci_5 <= ci_95 in real coordinates. We do this in the next loop
+        ci_5 = {}
+        ci_95 = {}
+        ci_25 = {}
+        ci_75 = {}
+
+        for k in self.state_config.iterkeys():
+            ci_5[k]  = np.min(np.array([_ci_5[k],_ci_95[k]]),axis=0)
+            ci_95[k] = np.max(np.array([_ci_5[k],_ci_95[k]]),axis=0)
+            ci_25[k] = np.min(np.array([_ci_25[k],_ci_75[k]]),axis=0)
+            ci_75[k] = np.max(np.array([_ci_25[k],_ci_75[k]]),axis=0)
+
+
+        # Now store uncertainty, and return it to the user in a dictionary
+        retval = {}
+        retval['post_cov'] = post_cov
+        retval['real_ci5pc'] = ci_5
+        retval['real_ci95pc'] = ci_95
+        retval['real_ci25pc'] = ci_25
+        retval['real_ci75pc'] = ci_75
+        retval['post_sigma'] = post_sigma
+        retval['hessian'] =  the_hessian
+        return retval
+#
+# *******************************************************************************************
+# *******************************************************************************************
 #
 # Create an instance of the EO-LDAS_ng state class
 #
@@ -107,7 +320,7 @@ def get_state():
         state_grid = np.arange(1, 366)
 
         # Create class instance
-        state = State(state_config, state_grid, default_par, parameter_min, parameter_max, verbose=True)
+        state = StateMax(state_config, state_grid, default_par, parameter_min, parameter_max, verbose=True)
 
         # Set the transformations for lai, cab, kw and km
         # I think it would be better to do in class initialization
@@ -192,8 +405,8 @@ def get_obs_operator_misr(emu_file, state, year, ind_cross, state_file, cam='An'
         bw[i] = b_max[i] - b_min[i]
         bh[i] = (b_max[i] + b_min[i])/2.
 
-    sigma_min = 0.001
-    sigma_max = 0.04
+    sigma_min = 0.004
+    sigma_max = 0.015
     sigma_obs = (sigma_max - sigma_min)*(bh-bh.min())/(bh.max()-bh.min())
     sigma_obs += sigma_min
     bu = sigma_obs
@@ -229,7 +442,7 @@ def get_obs_operator_misr(emu_file, state, year, ind_cross, state_file, cam='An'
             emulators[tag] = MultivariateEmulator ( dump=file_emu)
         else: print 'emulator file '+file_emu+' does not exist'
     # Create an instance the ObservationOperatorTimeSeriesGP class
-    obs = ObservationOperatorTimeSeriesGP(state.state_grid, state, rho_big, mask, emulators, bu, band_pass, bw)
+    obs = ObservationOperatorMax(state.state_grid, state, rho_big, mask, emulators, bu, band_pass, bw)
     return obs, doys
 
 
@@ -322,7 +535,7 @@ def get_obs_operator_etm(emu_file, state, year, ind_cross, state_file, cost_weig
                 print 'emulator file '+file_emu+' does not exist'
                 print sza[i], vza[i], raa[i]
                 print vaa[i], saa[i]
-    obs = ObservationOperatorTimeSeriesGP(state.state_grid, state, rho_big, mask, emulators, bu, band_pass, bw, cost_weight)
+    obs = ObservationOperatorMax(state.state_grid, state, rho_big, mask, emulators, bu, band_pass, bw, cost_weight)
     return obs, doys
 
 
@@ -369,7 +582,7 @@ def get_prior(state):
 
 
         # Create an instance of the prior class and return it
-        return Prior(mu_prior, prior_inv_cov)
+        return PriorMax(mu_prior, prior_inv_cov)
 
 
 # *******************************************************************
@@ -594,7 +807,7 @@ def do_fapar(save_dir, f_retval, n_site=1, year=2001, lad=1):
     except ValueError:
             print 'Something wrong with write_fapar_in()...'
     # compile fortran code using the system call
-    os.system("f2py -c -m fapar_py s3vt_mead/nadimtools.f s3vt_mead/nadimbrf.f s3vt_mead/fapar_py.f90")
+    os.system("f2py -c -m fapar_py nadimtools.f nadimbrf.f fapar_py.f90")
     # Call fortran functions for fapar
     out_fapar_mean = save_dir + 'output_fapar_nadim_mean/fapar_out_Ne%d_%d.dat' % (n_site, year)
 
@@ -626,9 +839,10 @@ if __name__ == "__main__":
     lad = 2
     n_ang = 7
     lad = 2
-    f_retval = save_dir + 'misr_etm_all_Ne%d_%d_ang%d.pkl' % (n_site, year, n_ang)
-    emul_dir = os.path.expanduser('~') + '/DATA/semidiscrete/lad%d/'%lad
-    run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=n_site, year=year, n_ang=n_ang, lad=lad)
+    for year in range(2001, 2009):
+        f_retval = save_dir + 'misr_etm_all_Ne%d_%d_ang%d.pkl' % (n_site, year, n_ang)
+        emul_dir = os.path.expanduser('~') + '/DATA/semidiscrete/lad%d/'%lad
+        run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=n_site, year=year, n_ang=n_ang, lad=lad)
 
-    (in_fapar_mean, in_fapar_sd, out_fapar_mean, out_fapar_sd) = do_fapar(save_dir, f_retval,\
+        (in_fapar_mean, in_fapar_sd, out_fapar_mean, out_fapar_sd) = do_fapar(save_dir, f_retval,\
                                                                           n_site=n_site, year=year, lad=lad)
