@@ -739,8 +739,8 @@ def run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=1, year=200
                                                 state, year, ind_cross, state_file_misr, cam='Ca')
 
 
-    obs_etm, doys = get_obs_operator_etm(emul_dir+'/nad_%03d_sza_%03d_vza_%03d_raa_gp.npz',\
-           state, year, ind_cross_etm, state_file_etm, cost_weight=1)
+    # obs_etm, doys = get_obs_operator_etm(emul_dir+'/nad_%03d_sza_%03d_vza_%03d_raa_gp.npz',\
+    #        state, year, ind_cross_etm, state_file_etm, cost_weight=1)
 
     prior = get_prior(state)
     pickle.dump(prior, open(save_dir+'prior_%d_%d.pkl' % (year, n_site), "wb"))

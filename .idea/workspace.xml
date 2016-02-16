@@ -24,9 +24,6 @@
       <change type="DELETED" beforePath="$PROJECT_DIR$/eoldas_retval_20160215_155800_hermes.geog.ucl.ac.uk.pkl" afterPath="" />
       <change type="DELETED" beforePath="$PROJECT_DIR$/eoldas_retval_20160215_162740_hermes.geog.ucl.ac.uk.pkl" afterPath="" />
       <change type="DELETED" beforePath="$PROJECT_DIR$/eoldas_retval_20160215_170451_hermes.geog.ucl.ac.uk.pkl" afterPath="" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/fapar_py.so" afterPath="$PROJECT_DIR$/fapar_py.so" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/iterate.dat" afterPath="$PROJECT_DIR$/iterate.dat" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/misr_mead.py" afterPath="$PROJECT_DIR$/misr_mead.py" />
     </list>
     <ignored path="misr-mead.iws" />
@@ -51,8 +48,8 @@
       <file leaf-file-name="misr_mead.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/misr_mead.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.8858859">
-              <caret line="868" column="112" selection-start-line="853" selection-start-column="4" selection-end-line="868" selection-end-column="112" />
+            <state vertical-scroll-proportion="-1.5485486">
+              <caret line="740" column="0" selection-start-line="740" selection-start-column="0" selection-end-line="740" selection-end-column="0" />
               <folding>
                 <element signature="e#216#234#0" expanded="true" />
               </folding>
@@ -486,8 +483,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/misr_mead.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.8858859">
-          <caret line="868" column="112" selection-start-line="853" selection-start-column="4" selection-end-line="868" selection-end-column="112" />
+        <state vertical-scroll-proportion="-1.5485486">
+          <caret line="740" column="0" selection-start-line="740" selection-start-column="0" selection-end-line="740" selection-end-column="0" />
           <folding>
             <element signature="e#216#234#0" expanded="true" />
           </folding>
