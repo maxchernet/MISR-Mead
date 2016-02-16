@@ -155,6 +155,26 @@ class ObservationOperatorMax ( ObservationOperatorTimeSeriesGP ):
 # Redifine class State to save *.pkl in other folder
 # ********************************************************************************************
 class StateMax(State):
+    def _create_output_file ( self, output_name ):
+
+        self.netcdf = False
+        if output_name is None:
+            tag = time.strftime( "%04Y%02m%02d_%02H%02M%02S_", time.localtime())
+            tag += platform.node()
+            self.output_name = "output/retval/eoldas_retval_%s" % tag
+
+        elif isinstance ( output_name, basestring ):
+            self.output_name = output_name + ".pkl"
+        else:
+            self.output_name = output_name.fname
+            self.retval_file = output_name
+            self.netcdf = True
+
+
+        print "Saving results to %s" % self.output_name
+    #
+    # *************************************************************************************************
+    #
     def do_uncertainty ( self, x ):
         """A method to calculate the uncertainty. Takes in a state vector.
 
@@ -195,10 +215,10 @@ class StateMax(State):
                 this_hessian = the_op.der_der_cost ( x, self.state_config, \
                     self, epsilon=epsilon )
             if self.verbose:
-                print "Saving Hessian to output/hessian/%s_%s.pkl" % ( self.output_name, \
+                print "Saving Hessian to %s_%s.pkl" % ( self.output_name, \
                     op_name )
             # Save the individual Hessian contributions to disk
-            cPickle.dump ( this_hessian, open("output/hessian/%s_%s_hessian.pkl" \
+            cPickle.dump ( this_hessian, open("%s_%s_hessian.pkl" \
                 % ( self.output_name, op_name ), 'w'))
             # Add the current Hessian contribution to the global Hessian
             the_hessian = the_hessian + this_hessian
@@ -719,8 +739,8 @@ def run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=1, year=200
                                                 state, year, ind_cross, state_file_misr, cam='Ca')
 
 
-    # obs_etm, doys = get_obs_operator_etm(emul_dir+'/nad_%03d_sza_%03d_vza_%03d_raa_gp.npz',\
-    #        state, year, ind_cross_etm, state_file_etm, cost_weight=1)
+    obs_etm, doys = get_obs_operator_etm(emul_dir+'/nad_%03d_sza_%03d_vza_%03d_raa_gp.npz',\
+           state, year, ind_cross_etm, state_file_etm, cost_weight=1)
 
     prior = get_prior(state)
     pickle.dump(prior, open(save_dir+'prior_%d_%d.pkl' % (year, n_site), "wb"))
@@ -766,7 +786,7 @@ def run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=1, year=200
 
             # Or with a first guess
             x_dict = get_first_guess(state, obs_misr_an, year, save_dir, n_site=n_site, etm=False)
-
+            # state.output_name = f_retval
             # ******************************************************************
             # Do Optimization
             # ******************************************************************
@@ -835,14 +855,15 @@ if __name__ == "__main__":
     misr_dir = 'data_misr/'
     etm_dir = 'data_landsat/'
     n_site = 1
-    year = 2001
+    year = 2002
     lad = 2
     n_ang = 7
     lad = 2
-    for year in range(2001, 2009):
-        f_retval = save_dir + 'misr_etm_all_Ne%d_%d_ang%d.pkl' % (n_site, year, n_ang)
-        emul_dir = os.path.expanduser('~') + '/DATA/semidiscrete/lad%d/'%lad
-        run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=n_site, year=year, n_ang=n_ang, lad=lad)
+    for n_site in [2, 3]:
+        for year in range(2001, 2009):
+            f_retval = save_dir + 'misr_etm_all_Ne%d_%d_ang%d.pkl' % (n_site, year, n_ang)
+            emul_dir = os.path.expanduser('~') + '/DATA/semidiscrete/lad%d/'%lad
+            run_mead(f_retval, save_dir, misr_dir, etm_dir, emul_dir, n_site=n_site, year=year, n_ang=n_ang, lad=lad)
 
-        (in_fapar_mean, in_fapar_sd, out_fapar_mean, out_fapar_sd) = do_fapar(save_dir, f_retval,\
-                                                                          n_site=n_site, year=year, lad=lad)
+            (in_fapar_mean, in_fapar_sd, out_fapar_mean, out_fapar_sd) = do_fapar(save_dir, f_retval,\
+                                                                              n_site=n_site, year=year, lad=lad)
